@@ -1,98 +1,117 @@
 # AT&T HACKATHON
-## Efektivní AI kontextová služba pro podnikové inženýrské znalosti (Efficient AI Context Service for Enterprise Engineering Knowledge)
 
-Sestavte efektivní kontextovou službu poháněnou umělou inteligencí, která mapuje spojení napříč rozptýlenými inženýrskými znalostmi, označuje rozpory ve zdrojích, upozorňuje na bezpečnostní rizika, vyplňuje mezery a poskytuje poznatky podložené důkazy.
+## Efficient AI Context Service for Enterprise Engineering Knowledge
 
-**Značky:** Znalostní graf, Multimodální AI, Ontologie
+Build an efficient, AI-powered Context Service that maps connections across scattered engineering knowledge, marks source contradictions, flags security risks, fills the gaps, and provides evidence-backed insights.
 
-**OBSAH**
-1. Přehled
-2. Technické detaily
-3. Tip pro implementaci
-4. Cílový výstup pro PoC
+**Tags:** Knowledge Graph, Multi-Modal AI, Ontology
 
----
+**CONTENTS**
 
-## 1 Přehled
-
-### Shrnutí
-Sestavte efektivní kontextovou službu poháněnou umělou inteligencí, která mapuje spojení napříč rozptýlenými inženýrskými znalostmi, označuje rozpory ve zdrojích, upozorňuje na bezpečnostní rizika, vyplňuje mezery a poskytuje poznatky podložené důkazy.
-
-### Pozadí
-Ve velkých organizacích jsou technické znalosti často rozptýlené a někdy protichůdné napříč mnoha odpojenými zdroji, včetně repozitářů na GitHubu, wiki stránek, souborů Markdown, diagramů architektury, specifikací API, poznámek k návrhu systému, poznámek ze schůzek, souborů nasazení, schémat databází, historických dokumentů a znalostí o incidentech. Některé z těchto zdrojů mohou také odhalit bezpečnostní obavy, zastaralé předpoklady nebo skrytá provozní rizika.
-
-**To představuje výzvu pro:**
-Architekty, vývojáře a inženýrské týmy. Potřebují pochopit například:
-* Jak jsou systémy propojeny a jak může změna v jedné službě ovlivnit jinou službu nebo závislý systém.
-* Které repozitáře spolu souvisejí a co mají společného.
-* Kdo je vlastníkem komponenty.
-* Zda je dokumentace přesná a odráží kód.
-* Zda je systémový diagram přesný a odráží kód i wiki.
-* Která část kódu může souviset s výpadkem aplikace, na základě poznámek ze schůzek nebo poznámek k incidentům.
-
-**Asistenti pro kódování s umělou inteligencí**
-Asistenti pro kódování s umělou inteligencí, které používají vývojáři, také potřebují správný kontext ve správný čas. Bez přesného podnikového kontextu mohou být generované odpovědi nebo kód neúplné, nekonzistentní, nezabezpečené nebo nesprávné.
-
-### Příklady výzvy
-
-| SCÉNÁŘ | VÝZVA | S ČÍM MŮŽE KONTEXTOVÁ SLUŽBA POMOCI |
-| :--- | :--- | :--- |
-| **Změna kódu v repozitáři A** | To může ovlivnit jiný kód někde jinde. | Definovat vztah mezi repozitáři kódu. |
-| **Zastaralá dokumentace** | Wiki stránka může popisovat zastaralé schéma databáze, zatímco skutečné schéma už je ve zdrojovém kódu. | Detekovat tento rozdíl, určit, který zdroj je aktuálnější (možná podle času, poznámek ze schůzek a dalších faktů) a vysvětlit nesrovnalost pomocí důkazů. |
-| **Znalosti pouze v diagramu** | Diagram architektury může obsahovat klíčové informace, které v kódu chybí. | Extrahovat tyto informace z diagramu, propojit je s relevantními technickými zdroji a reprezentovat je jako kontext podložený důkazy. |
-| **Nezabezpečené vzory** | Kód může obsahovat problémy související s bezpečností nebo nezabezpečené implementační vzory. | Odhalit tyto obavy, označit je a pomoci zajistit, aby generovaný kód neopakoval stejná bezpečnostní rizika. |
-
-### Obchodní hodnota
-Kontextová služba přímo zlepšuje inženýrskou produktivitu, kvalitu softwaru, provozní spolehlivost a vývojářskou zkušenost. Stručně řečeno, obchodní hodnota této služby je:
-* Snížit inženýrský čas strávený hledáním a chápáním vztahů, mezer a technického kontextu.
-* Zlepšit kvalitu a bezpečnost kódu generovaného umělou inteligencí tím, že asistentům pro kódování poskytne lepší kontext.
-* Zlepšit analýzu incidentů propojením výpadků se službami, repozitáři a oblastmi kódu.
-* Poskytnout návratnost investic (ROI) zkrácením doby vyšetřování, přepracování a vyhnutelných produkčních problémů.
-
-### Cíl
-Koncepční pohled na vysoké úrovni.
-Cílem tohoto hackathonu je vybudovat pokročilé agentní ETL k vytvoření kontextové služby. Agentní ETL bude klasifikovat, mapovat, ověřovat a obohacovat příchozí data vůči předdefinované ontologii. Výzvou je aplikovat inženýrské myšlení a AI k vybudování efektivní a bezpečné kontextové služby z rozptýlených zdrojových informací, kterou mohou efektivně využívat inženýři a agentní AI kódovací asistenti.
-
-### Kritéria hodnocení
-
-> **Poznámka:** Účastníci mohou mít různé úrovně přístupu k modelům LLM a VLM. Proto nejdůležitějším kritériem hodnocení není jen samotný výstup, ale jak jasně tým vysvětlí inženýrské a AI myšlení za řešením, včetně rozhodnutí o návrhu, přístupu k validaci, omezení a jak by se řešení dalo v budoucnu zlepšit.
-
-| OBLAST HODNOCENÍ | CO SE BUDE HODNOTIT | BODY |
-| :--- | :--- | :--- |
-| **Přístup k extrakci** | Jak řešení přijímá a extrahuje znalosti z rozptýlených inženýrských zdrojů, včetně toho, jak je extrakce automatizována a schopnosti zpracovat různé formáty. | 15 |
-| **Reprezentace znalostí** | Jak dobře je definována reprezentace znalostí, včetně ontologie, schématu a souvisejících struktur, a jak moc bere v úvahu reprezentaci zdroje z více perspektiv, jako jsou koncepty, politiky, systémy, vztahy, závislosti, rizika a důkazy. To zahrnuje, jak jsou extrahované znalosti strukturovány, validovány, ukládány, indexovány a vyhledávány (např. přes databázové znalostní grafy, textové znalostní grafy, vektorové databáze nebo hybridní přístup) při zachování důvěryhodnosti kontextu. | 25 |
-| **Připojení a využití kontextové služby** | Jak efektivně mohou kontextovou službu používat lidé, IDE a agentní kódovací AI asistenti, včetně přístupu přes MCP, API nebo podobné integrační metody. | 15 |
-| **Prezentace a vysvětlení** | Jak jasně tým prezentuje inženýrské a AI myšlení za řešením, včetně návrhu, architektury, uvažování, kompromisů, omezení a implementačního přístupu. | 35 |
-| **Pohled vpřed** | Jak přesvědčivě tým vysvětlí, jak by tento přístup mohl být škálován, udržován, integrován do reálných pracovních postupů vývojářů a udržován přesný, bezpečný a důvěryhodný v průběhu času. | 10 |
-| **Celkem** | | **100** |
+1. Overview
+2. Technical Details
+3. Implementation Hint
+4. Target Deliverable for the PoC
 
 ---
 
-## 2 Technické detaily
+## 1 Overview
 
-### Podnikové inženýrské znalosti
-Pro jednoduchost jsou rozptýlené informace uloženy v jednom repozitáři na GitHubu, který bude sdílen v den hackathonu. Účastníci hackathonu budou využívat rozptýlené inženýrské znalosti z jednoho repozitáře na GitHubu nebo monorepa, které obsahuje více technických typů zdrojů, jako jsou:
+### Summary
 
-| # | TYP ZDROJE | CO MŮŽE OBSAHOVAT | NÁPOVĚDA |
+Build an efficient, AI-powered Context Service that maps connections across scattered engineering knowledge, marks source contradictions, flags security risks, fills the gaps, and provides evidence-backed insights.
+
+### Background
+
+In large organizations, technical knowledge is often scattered and sometimes contradictory across many disconnected sources, including GitHub repositories, wiki pages, Markdown files, architecture diagrams, API specifications, system design notes, meeting notes, deployment files, database schemas, historical documents, and incident knowledge. Some of these sources may also reveal security concerns, outdated assumptions, or hidden operational risks.
+
+**This creates a challenge for:**
+
+**Architects, Developers, Engineering Teams**
+They need to understand, for example:
+
+*   How systems are connected, and how a change in one service may impact another service or dependent system.
+*   Which repositories are related and what they have in common.
+*   Who owns a component.
+*   Whether documentation is accurate and reflects the code.
+*   Whether a system diagram is accurate and reflects the code and the wiki.
+*   Which part of the code may be related to an application outage, based on meeting notes or incident notes.
+
+**AI coding assistants**
+
+AI coding assistants used by developers also need the right context at the right time. Without accurate enterprise context, generated answers or code can be incomplete, inconsistent, insecure, or incorrect.
+
+### Examples of the Challenge
+
+| SCENARIO | CHALLENGE | WHAT THE CONTEXT SERVICE CAN HELP WITH |
+| :--- | :--- | :--- |
+| **Change code in repo A** | This might impact other code somewhere else. | Define the relationship between the code repositories. |
+| **Stale documentation** | A wiki page may describe an outdated database schema, while the actual schema is already there in the source code. | Detect this difference, determine which source is more current - perhaps by time, meeting notes, and other facts - and explain the inconsistency with evidence. |
+| **Knowledge only in a diagram** | An architecture diagram may contain crucial information that is missing from the code. | Extract this information from the diagram, connect it to related technical sources, and represent it as evidence-backed context. |
+| **Insecure patterns** | The code may contain security-related issues or insecure implementation patterns. | Detect these concerns, flag them, and help ensure that generated code does not repeat the same security risks. |
+
+### Business Value
+
+Context Service directly improves engineering productivity, software quality, operational reliability, and developer experience.
+
+Briefly, the business value of this service is to:
+
+*   Reduce engineering time spent searching for and understanding relationships, gaps, and technical context.
+*   Improve the quality and security of AI-generated code by giving coding assistants better context.
+*   Improve incident analysis by connecting outages to services, repositories, and code areas.
+*   Provide ROI by reducing investigation time, rework, and avoidable production issues.
+
+### Goal
+
+**High-level conceptual view.**
+
+The goal of this hackathon is to build an advanced agentic ETL to build the Context Service. The agentic ETL will classify, map, validate, and enrich incoming data against the predefined ontology. The challenge is to apply engineering and AI mindset to build, from scattered source information, an efficient and secure Context Service that can be used effectively by engineers and agentic AI coding assistants.
+
+### Judging Criteria
+
+> **Note:** Participants may have different levels of access to LLM and VLM models. Therefore, the most important judging criterion is not only the output itself, but how clearly the team explains the engineering and AI thinking behind the solution, including the design decisions, validation approach, limitations, and how the solution could be improved in the future.
+
+| JUDGING AREA | WHAT WILL BE EVALUATED | POINTS |
+| :--- | :--- | :--- |
+| **Extraction Approach** | How the solution ingests and extracts knowledge from scattered engineering sources, including how the extraction is automated and the ability to handle different formats. | 15 |
+| **Knowledge Representation** | How well the Knowledge Representation, including ontology, schema, and related structures, is defined, and how much it takes into consideration representing the source from multiple perspectives, such as concepts, policies, systems, relationships, dependencies, risks, and evidence. This includes how extracted knowledge is structured, validated, stored, indexed, and retrieved, for example through database-based knowledge graphs, text-based knowledge graphs, vector databases, or a hybrid approach, while keeping the context trustworthy. | 25 |
+| **Context Service Connection and Usage** | How effectively the Context Service can be used by humans, IDEs, and agentic AI coding assistants, including access through MCP, APIs, or similar integration methods. | 15 |
+| **Presentation and Explanation** | How clearly the team presents the engineering and AI mindset behind the solution, including the design, architecture, reasoning, trade-offs, limitations, and implementation approach. | 35 |
+| **Forward View** | How convincingly the team explains how this approach could be scaled, maintained, integrated into real developer workflows, and kept accurate, secure, and trustworthy over time. | 10 |
+| **Total** | | **100** |
+
+---
+
+## 2 Technical Details
+
+### Enterprise Engineering Knowledge
+
+For simplicity, the scattered information is stored in one GitHub repository that will be shared on the hackathon day.
+
+Hackathon participants will use scattered engineering knowledge from one GitHub repository or monorepo that contains multiple technical source types, such as:
+
+| # | SOURCE TYPE | WHAT IT MIGHT CONTAIN | HINT |
 | :--- | :--- | :--- | :--- |
-| **1** | **Zdrojový kód** | Python, JavaScript, včetně API, konfiguračních souborů, manifestů závislostí, testů a souborů README. | Agent může prozkoumat skutečné implementace a identifikovat závislosti. |
-| **2** | **Diagramy návrhu systému** | PNG nebo SVG diagramy architektury, sekvenční diagramy, databázová schémata a nákresy interakcí služeb. | Agent může porovnat zamýšlenou architekturu se skutečnou implementací v kódu. |
-| **3** | **Wiki a dokumentace** | Markdown stránky popisující API, obchodní požadavky, autentizaci, nasazení, architektonická rozhodnutí a řešení problémů. | Tyto dokumenty vysvětlují účel a zamýšlené chování komponent. |
-| **4** | **Specifikace API** | OpenAPI YAML/JSON soubory, příklady HTTP požadavků a odpovědí, schémata událostí a integrační kontrakty. | Pomáhají identifikovat spojení mezi službami, i když je jejich zdrojový kód umístěn v různých složkách. |
-| **5** | **Rozhodnutí o architektuře a poznámky ze schůzek** | Návrhy designu, plány migrace, technická shrnutí schůzek, záznamy o rozhodnutích o architektuře a požadavky na změny. | Vysvětlují, proč byl systém navržen určitým způsobem, a mohou odhalit vztahy, které nejsou zjevné pouze z kódu. |
-| **6** | **Databázová schémata a datové modely** | SQL schémata, diagramy entit a vztahů, migrační soubory a vzorová data se syntetickými záznamy. | Jsou užitečné pro propojení aplikací se sdílenými datovými modely a databázemi. |
-| **7** | **Problémy, hlášení o chybách a poznámky k vydání** | Exportované popisy problémů, protokoly změn, oznámení o ukončení podpory, vyšetřování chyb, poznámky k výpadkům a syntetické tikety. | Mohou odhalit zastaralou dokumentaci, plánované integrace, produkční problémy a závislosti, které se časem změnily. |
-| **8** | **Konfigurace závislostí a nasazení** | `requirements.txt`, `package.json`, Dockerfiles, Docker Compose soubory, CI workflows, Terraform soubory, Kubernetes manifesty a konfigurace prostředí. | Pomáhají odhalit sdílené knihovny, vztahy nasazení, běhové závislosti a závislosti infrastruktury. |
+| **1** | **Source Code** | Python, JavaScript, including APIs, configuration files, dependency manifests, tests, and README files. | The agent can inspect actual implementations and identify dependencies. |
+| **2** | **System Design Diagrams** | PNG or SVG architecture diagrams, sequence diagrams, database schemas, and service-interaction drawings. | The agent can compare the intended architecture with the actual implementation in the code. |
+| **3** | **Wiki and Documentation** | Markdown pages describing APIs, business requirements, authentication, deployment, architecture decisions, and troubleshooting. | These documents explain the purpose and intended behavior of components. |
+| **4** | **API Specifications** | OpenAPI YAML/JSON files, example HTTP requests and responses, event schemas, and integration contracts. | These help identify connections between services, even when their source code is located in different folders. |
+| **5** | **Architecture Decisions and Meeting Notes** | Design proposals, migration plans, technical meeting summaries, architecture decision records, and change requests. | These explain why a system was designed in a certain way and may reveal relationships that are not obvious from code alone. |
+| **6** | **Database Schemas and Data Models** | SQL schemas, entity-relationship diagrams, migration files, and sample data with synthetic records. | These are useful for connecting applications to shared data models and databases. |
+| **7** | **Issues, Bug Reports, and Release Notes** | Exported issue descriptions, changelogs, deprecation notices, bug investigations, outage notes, and synthetic tickets. | These can reveal outdated documentation, planned integrations, production issues, and dependencies that changed over time. |
+| **8** | **Dependency and Deployment Configuration** | `requirements.txt`, `package.json`, Dockerfiles, Docker Compose files, CI workflows, Terraform files, Kubernetes manifests, and environment configuration. | These help reveal shared libraries, deployment relationships, runtime dependencies, and infrastructure dependencies. |
 
-### Příklad nedokonalých informací v repozitáři na GitHubu
-V navrženém repozitáři na GitHubu mohou účastníci najít:
-* Zastaralou dokumentaci, která popisuje starší API, jež se v kódu nenachází.
-* Dva diagramy, které si navzájem odporují, možná proto, že jeden představuje předchozí architekturu.
-* Nesouvisející projekty, které náhodou používají stejné API. (U nichž je třeba doložit, že se nejedná o překlep v jednom z projektů).
-* Bezpečnostní problémy v kódu nebo konfiguraci, které by generovaný kód neměl opakovat.
-* Poznámky k vydání nebo zprávy o incidentech, které zmiňují nikde nedokumentované závislosti.
-* Wiki stránku, která popisuje schéma jinak než aktuální zdrojový kód nebo migrační soubory.
+### Example Imperfect Information in the GitHub Repository
 
-Tyto nedokonalé informace jsou úmyslné, ale inspirují se realitou toho, jak podnikové repozitáře často vypadají.
+In the proposed GitHub repository, participants may find:
 
-> Kontextová služba by neměla slepě propojovat vše. Měla by odlišovat ověřená fakta od předpokladů, zastaralých informací, rozporů, slabých důkazů a bezpečnostních obav.
+*   Outdated documentation that describes an older API that is not present in the code.
+*   Two diagrams that contradict each other, perhaps because one represents a previous architecture.
+*   Unrelated projects that happen to use the same API. It might be fine, but it needs evidence that it is not a typo in one of these two projects.
+*   Security issues in code or configuration that should not be repeated by generated code.
+*   Release notes or incident reports that mention dependencies not documented anywhere else.
+*   A wiki page that describes a schema differently from the current source code or migration files.
+
+This imperfect information is intentional, but it is inspired by the reality of how enterprise repositories often look.
+
+> The Context Service should not blindly connect everything. It should distinguish verified facts from assumptions, outdated information, contradictions, weak evidence, and security concerns.

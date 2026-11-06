@@ -190,3 +190,23 @@ def test_proposed_adr_claims_are_proposed(files, base):
     X.apply_doc_extraction(ext, adr, resolver, base, audit)
     c = [c for c in base.claims if c.provenance.file_path == adr.source.path and c.predicate == EdgeType.DEPENDS_ON]
     assert c and c[0].mode == "proposed"
+
+
+def test_ontology_domain_range():
+    from etl_pipeline.schema import type_check
+    assert type_check("CALLS", "SERVICE", "SERVICE")
+    assert not type_check("CALLS", "SERVICE", "TABLE")
+    assert not type_check("HAS_COLUMN", "SERVICE", "COLUMN")
+    assert type_check("OWNED_BY", "SERVICE", "TEAM") and not type_check("OWNED_BY", "SERVICE", "SERVICE")
+
+
+def test_name_resolution_prefix_and_generic_words():
+    from knowledge_store.graph_db import resolve_name
+    idx = {"datastore:redis": {"id": "datastore:redis", "name": "redis", "type": "DATASTORE", "aliases": [], "scope": "live"},
+           "table:user-service.users": {"id": "table:user-service.users", "name": "user-service.users", "type": "TABLE",
+                                        "aliases": [], "scope": "live"},
+           "service:inventory-service": {"id": "service:inventory-service", "name": "inventory-service",
+                                         "type": "SERVICE", "aliases": ["Stock"], "scope": "live"}}
+    assert resolve_name("redis cache", idx) == "datastore:redis"
+    assert resolve_name("users table", idx) == "table:user-service.users"
+    assert resolve_name("Stock", idx) == "service:inventory-service"

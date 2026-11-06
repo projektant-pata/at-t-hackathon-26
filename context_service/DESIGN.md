@@ -78,6 +78,17 @@ one image.
 | PNG diagrams | VLM extraction plus an **independent second VLM pass** that re-checks every arrow (present? direction? solid or dashed?) | VLMs misread arrows; dashed arrows map to `PROPOSED`; "process" diagrams produce no `CALLS` edges |
 | Code vs. contract semantics | LLM code review per service, given the contract and the governing policies extracted from docs | catches off-by-one errors and contract violations that regexes cannot |
 
+**Efficiency: batching and model routing.**
+- Small documents are packed 8 per call, sorted by path so related records travel together. Every quote is still grounded against its own file.
+- Entity clusters share judge calls, up to 4 per call. The result is about 37 LLM calls per full build instead of about 115.
+- Each stage has its own model: `CS_EXTRACT_MODEL`, `CS_VISION_MODEL`, `CS_REVIEW_MODEL`, `CS_JUDGE_MODEL`, plus `CS_EXTRACT_FALLBACK_MODEL` for failover. On the free tier, which caps each model at 20 requests per day, this spreads load across models; on a paid key it lets you put a Pro-class model on the judge only.
+- A daily-quota error fails fast so it does not burn retries. Per-minute limits back off exponentially.
+- The content-hash cache makes re-runs free. Prompts are deterministic (for example, governing policies are sorted) so that cache keys stay stable.
+
+**Ontology gate (domain and range).** Every LLM or VLM relation is type-checked against `DOMAIN_RANGE`. An ill-typed relation is kept only as a weak `MENTIONS` and counted in the audit. For example, a sequence diagram read as "payment-service CALLS orders table" never becomes a runtime dependency.
+
+**Semantic policy linking (`policy_linker.py`).** Code-level findings are linked to the documented POLICY nodes that govern the same component, using embedding similarity. The cosine threshold is 0.73, calibrated on this corpus: true links scored at least 0.74 and the best false link scored 0.716. The linked policy becomes claim-side evidence, so a rule hit such as "full record logged" also cites "snapshots are masked" from the logging standard. The finding then shows documented intent next to the contradicting runtime behaviour.
+
 **Example.** The wiki's "Stock" and the spec's "Charge Ledger" are resolved to `service:inventory-service` and `service:payment-service`. The aliases come from LLM extraction, and each one is grounded in a quoted sentence.
 
 ## 5. Validation (built-in and measured)
@@ -97,6 +108,23 @@ one image.
 - Q1–Q7: MCP/retrieval probes (owner, double charge, blast radius, console exception, security guidance, plan validation).
 
 **C. Metrics and ablation.** `python -m eval.run_eval --ablation` writes `out/eval_report.md`. It rebuilds the graph three ways (deterministic only, LLM extraction without the judge, the full pipeline) and reports recall, decoy false links, positive controls and probe hit rate. This shows what each layer adds. The LLM cache makes repeat runs free.
+
+**Measured results.** These come from the run on 2026-11-06. Models were free-tier Gemini 3 Flash and Flash-Lite. The free tier caps each model at 20 requests per day, so 7 of the 14 extraction batches fell back to Flash-Lite.
+
+| Variant | Golden recall (G1–G10) | Both sides cited | Decoy false links | Positive controls | Probes |
+|---|---|---|---|---|---|
+| Deterministic parsers + security rules only | 2/10 | 0/10 | 0/8 | 6/6 | 4/7 |
+| + LLM/VLM extraction, grounding and policy linking (no judge) | 4/10 | 3/10 | 0/8 | 6/6 | 6/7 |
+| + adversarial judge (full pipeline) | **7/10** | **6/10** | **0/8** | **6/6** | **6/7** |
+
+The integrity checks pass in every variant. The grounding gate rejected 1.7% of LLM claims.
+
+Misses and their causes:
+- **G4 (ownership drift).** The Flash-Lite fallback mislabelled the wiki owner. The stronger Flash model extracted it correctly in an earlier run, and that run passed G4.
+- **G7 (PII vs. logging standard).** Flash-Lite extracted no policy from `wiki/logging-standard.md`. When that policy exists, the policy linker connects it at cosine 0.835.
+- **G5 (target-state diagram vs. direct console call).** The diagram box "Operations console" was not resolved to `app:admin`. This needs either embedding-based entity resolution or a stronger VLM.
+
+All three are extraction-quality limits, not design limits, and a paid-tier run should close most of them.
 
 > Overfitting caveat: the golden set was hand-built from this corpus. To mitigate this, **no file names or corpus-specific rules live in the pipeline**. Only `eval/` references them. Every rule is a generic pattern.
 
@@ -130,7 +158,7 @@ one image.
 |---|---|---|---|
 | Regex/AST parsers instead of full tree-sitter / CodeQL | fast, transparent, exact lines | brittle on unusual code styles; the Java split-path router is handled heuristically | swap in tree-sitter queries behind the same `Claim` contract; add Semgrep rule packs |
 | LLM judge per entity cluster | catches cross-document supersession (ADR > wiki) | cost grows with the number of clusters; the judge can still be wrong | must cite ≥ 2 grounded files; Tier-1 claims cannot be overruled; deterministic candidates survive judge failure; humans review via the audit report |
-| Flash-class judge (free-tier key: Pro models have zero quota) | runs at all on the available key | weaker reasoning than a Pro model on subtle conflicts | `CS_JUDGE_MODEL` is configurable; the ablation quantifies the difference |
+| Flash and Flash-Lite models only. The free-tier key has 0 Pro quota and 20 requests per model per day | runs at all on the available key | weaker reasoning than a Pro model on subtle conflicts | `CS_JUDGE_MODEL` is configurable; the ablation quantifies the difference |
 | Single Neo4j store (graph + vectors + full-text) | no dual-index sync; one Cypher query covers seed and expansion | Community edition has no GDS, so PPR runs in Python | Enterprise or GDS for in-database PPR; Neo4j clustering for scale |
 | Fixed ontology + CONCEPT fallback | deterministic tools such as blast radius | new concepts land in CONCEPT | periodic human-in-the-loop promotion of frequent CONCEPT clusters into types |
 | Lexical/fuzzy entity resolution (no embedding clustering yet) | predictable; scope guard is easy to reason about | misses paraphrased names that have no alias sentence | add embedding similarity with an LLM confirmation step for merges |

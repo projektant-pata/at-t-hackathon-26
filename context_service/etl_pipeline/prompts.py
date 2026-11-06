@@ -35,6 +35,12 @@ You read ONE document and emit structured claims. Rules:
 - Extract schema facts (tables/columns, money representation), endpoints and versions, ownership/escalation teams,
   dependencies (caches, datastores, services), and which records (ADR/issue/incident/release) affect which entities.
 - Extract normative rules (MUST/SHOULD/must not ...) as `policies`, with the entity ids they govern.
+- Be exhaustive: a typical document yields 3-12 claims. Extract every relation to a component, datastore, cache,
+  external system, table/column, endpoint/version, team or record - INCLUDING entities that are NOT in the catalog
+  (create an id with the formats below, e.g. datastore:<name>, concept:<name>).
+- Extract removals and replacements explicitly: "X was removed / no longer uses Y" -> claim on the old relation with
+  mode `deprecated`; "A replaces B" -> B DEPRECATED_BY A. Historical descriptions keep the mode the document implies.
+- Report every nickname used for a catalog entity (product names, console names, team shorthand) in `aliases`.
 - Ignore pure noise (lunch, printers, projectors, room bookings).
 """ + ONTOLOGY_BRIEF
 

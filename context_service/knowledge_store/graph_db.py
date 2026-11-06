@@ -82,6 +82,8 @@ def resolve_name(text: str, index: dict[str, dict], prefer_live: bool = True) ->
                 score = SequenceMatcher(None, k, nk).ratio()
                 if len(k) >= 4 and (nk.endswith(k) or k in nk):
                     score = max(score, 0.9 - type_rank.get(e["type"], 9) * 0.01)
+                elif len(nk) >= 5 and k.startswith(nk):  # "redis cache" -> datastore:redis
+                    score = max(score, 0.87 - type_rank.get(e["type"], 9) * 0.001)
             if score > best:
                 best, best_id = score, eid
     if best >= 0.85:
@@ -161,7 +163,7 @@ class MemoryGraph:
             if d >= depth:
                 continue
             for e in self.inn[node]:
-                if e["type"] not in IMPACT or e["status"] in ("SUPERSEDED", "REJECTED"):
+                if e["type"] not in IMPACT or e["status"] not in TRUSTED:  # impact = runtime truth only
                     continue
                 src = e["source"]
                 if src not in seen:

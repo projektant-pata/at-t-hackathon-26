@@ -67,6 +67,26 @@ class EdgeType(str, Enum):
 IMPACT_EDGES = {EdgeType.CALLS, EdgeType.DEPENDS_ON, EdgeType.READS_WRITES, EdgeType.EXPOSES,
                 EdgeType.HAS_COLUMN, EdgeType.CONFIGURED_BY}
 
+_RUNTIME = {"SERVICE", "FRONTEND_APP", "CONCEPT", "DEPLOY_UNIT"}
+_ANY = None
+# predicate -> (allowed subject types, allowed object types); None = unconstrained
+DOMAIN_RANGE: dict[str, tuple[set | None, set | None]] = {
+    "CALLS": (_RUNTIME, _RUNTIME | {"API_ENDPOINT", "DATASTORE"}),
+    "EXPOSES": (_RUNTIME, {"API_ENDPOINT", "CONCEPT"}),
+    "READS_WRITES": (_RUNTIME, {"TABLE", "COLUMN", "DATASTORE", "CONCEPT"}),
+    "HAS_COLUMN": ({"TABLE", "CONCEPT"}, {"COLUMN", "CONCEPT"}),
+    "OWNED_BY": (_ANY, {"TEAM"}),
+    "DEPENDS_ON": (_RUNTIME | {"LIBRARY"}, _RUNTIME | {"LIBRARY", "DATASTORE", "API_ENDPOINT"}),
+    "CONFIGURED_BY": (_RUNTIME | {"LIBRARY"}, {"CONFIG_KEY"}),
+    "GOVERNS": ({"POLICY"}, _ANY),
+}
+
+
+def type_check(predicate: str, subject_type: str, object_type: str) -> bool:
+    dom, rng = DOMAIN_RANGE.get(predicate, (None, None))
+    return (dom is None or subject_type in dom) and (rng is None or object_type in rng)
+
+
 Modality = Literal["code", "sql", "config", "api_spec", "doc", "diagram"]
 AssertionMode = Literal["observed", "asserted", "proposed", "deprecated", "rejected"]
 EdgeStatus = Literal["VERIFIED", "DOCUMENTED", "ASSERTED", "PROPOSED", "SUPERSEDED", "CONTRADICTED", "REJECTED"]

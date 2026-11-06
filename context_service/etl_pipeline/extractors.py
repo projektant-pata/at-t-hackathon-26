@@ -19,7 +19,7 @@ from etl_pipeline.grounding import ground
 from etl_pipeline.parsers.common import ParseResult, scope_prefix
 from etl_pipeline.resolver import Resolver
 from etl_pipeline.router import RoutedFile
-from etl_pipeline.schema import (EdgeType, Entity, EvidenceRef, LLMCodeReview, LLMArrowVerification, LLMDocBatch,
+from etl_pipeline.schema import (type_check, EdgeType, Entity, EvidenceRef, LLMCodeReview, LLMArrowVerification, LLMDocBatch,
                                  LLMDiagramExtraction, LLMDocExtraction, NodeType, Risk, SourceDoc)
 
 log = logging.getLogger("extractors")
@@ -35,6 +35,7 @@ class ExtractionAudit:
     grounded: int = 0
     rejected_ungrounded: list[dict] = field(default_factory=list)
     rejected_schema: list[str] = field(default_factory=list)
+    ontology_coerced: list[str] = field(default_factory=list)
     dropped_arrows: list[dict] = field(default_factory=list)
     unverified_arrows: int = 0
     code_findings: int = 0
@@ -136,8 +137,11 @@ async def extract_doc_batch(batch: list[RoutedFile], catalog: str) -> dict[str, 
     docs = "\n\n".join(prompts.DOC_BATCH_ITEM.format(
         path=f.source.path, kind=f.source.kind, tier=f.source.tier, date=f.source.date, owner=f.source.owner,
         status=f.source.status, rid=record_entity_id(f.source), text=(f.text or "")[:12000]) for f in batch)
-    out = await llm.structured(config.EXTRACT_MODEL, prompts.DOC_BATCH_SYSTEM,
-                               prompts.DOC_BATCH_USER.format(catalog=catalog, documents=docs), LLMDocBatch)
+    user = prompts.DOC_BATCH_USER.format(catalog=catalog, documents=docs)
+    out = await llm.structured(config.EXTRACT_MODEL, prompts.DOC_BATCH_SYSTEM, user, LLMDocBatch)
+    if not out and config.EXTRACT_FALLBACK_MODEL:
+        log.warning("batch failed on %s, falling back to %s", config.EXTRACT_MODEL, config.EXTRACT_FALLBACK_MODEL)
+        out = await llm.structured(config.EXTRACT_FALLBACK_MODEL, prompts.DOC_BATCH_SYSTEM, user, LLMDocBatch)
     if not out:
         return {}
     wanted = {f.source.path for f in batch}
@@ -174,6 +178,7 @@ def apply_doc_extraction(ext: LLMDocExtraction, f: RoutedFile, resolver: Resolve
         obj = resolver.resolve(c.object, c.object_type, s.scope, prefix, s.tier)
         if subj == obj:
             continue
+        pred = _validate_types(pred, subj, obj, res, audit, s.path)
         snippet = " ".join(text.splitlines()[l1 - 1:l2]).strip() if l1 else c.snippet
         res.claim(s, subj, pred, obj, snippet, l1, f"llm:{config.EXTRACT_MODEL}", mode=mode, line_end=l2,
                   grounding_score=round(score, 3), quoted=c.snippet[:300])
@@ -215,6 +220,16 @@ def title_aliases(files: list[RoutedFile], resolver: Resolver) -> None:
             canonical = resolver.alias.get(re.sub(r"[^a-z0-9]", "", m.group(2).lower()))
             if canonical:
                 resolver.add_alias(m.group(1).strip(), canonical, s.path, s.scope)
+
+
+def _validate_types(pred: EdgeType, subj: str, obj: str, res: ParseResult, audit: ExtractionAudit,
+                    path: str) -> EdgeType:
+    """Ontology gate: ill-typed relations (e.g. a service CALLS a table) are kept only as weak MENTIONS."""
+    st, ot = res.entities[subj].type.value, res.entities[obj].type.value
+    if type_check(pred.value, st, ot):
+        return pred
+    audit.ontology_coerced.append(f"{path}: {subj}({st}) -{pred.value}-> {obj}({ot})")
+    return EdgeType.MENTIONS
 
 
 # --------------------------------------------------------------------------- diagrams
@@ -287,6 +302,7 @@ def apply_diagram(ext: LLMDiagramExtraction, ver: LLMArrowVerification | None, f
             pred = EdgeType.DEPENDS_ON if tgt_type in (NodeType.DATASTORE, NodeType.LIBRARY) else \
                 EdgeType.OWNED_BY if tgt_type == NodeType.TEAM else EdgeType.CALLS
             mode = "proposed" if ("dash" in style or status in {"target", "proposal"}) else "asserted"
+            pred = _validate_types(pred, src_id, tgt_id, res, audit, s.path)
         res.claim(s, src_id, pred, tgt_id, f"[{ext.title} | {ext.date_text}] {a.source} -> {a.target} "
                                            f"[{a.label}] ({style} line)", None, model, mode=mode,
                   arrow_label=a.label, line_style=style, diagram_status=status, second_pass_verified=bool(chk))
@@ -305,7 +321,7 @@ async def review_code(service: str, code_files: list[RoutedFile], spec_files: li
                     f"(source: {src.path}, {src.date})" for p, src in policies) or "(none)"
     user = prompts.CODE_REVIEW_USER.format(service=service, spec_paths=", ".join(f.source.path for f in spec_files),
                                            spec=spec[:20000], policies=pol, code=code[:60000])
-    return await llm.structured(config.JUDGE_MODEL, prompts.CODE_REVIEW_SYSTEM, user, LLMCodeReview)
+    return await llm.structured(config.REVIEW_MODEL, prompts.CODE_REVIEW_SYSTEM, user, LLMCodeReview)
 
 
 def apply_code_review(review: LLMCodeReview, service_eid: str, code_files: list[RoutedFile],
@@ -339,7 +355,7 @@ def apply_code_review(review: LLMCodeReview, service_eid: str, code_files: list[
         r = Risk(category=cat, severity=sev, title=fnd.title, description=fnd.explanation, entities=[service_eid],
                  evidence=evidence, guidance_for_codegen=fnd.guidance_for_codegen,
                  current_truth=f"Code at {code_ev.file_path}:{code_ev.line_start} behaves as: {code_ev.snippet[:160]}",
-                 detected_by=f"llm:{config.JUDGE_MODEL}", confidence=0.75 if len(evidence) > 1 else 0.6)
+                 detected_by=f"llm:{config.REVIEW_MODEL}", confidence=0.75 if len(evidence) > 1 else 0.6)
         r.compute_id()
         res.risks.append(r)
         audit.code_findings += 1

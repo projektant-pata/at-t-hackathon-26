@@ -105,7 +105,7 @@ async def llm_stage(files: list[RoutedFile], res: ParseResult, resolver: Resolve
         spec_files = [by_path[p] for p in (f"api-specs/{name}.md", f"api-specs/{name}.openapi.json") if p in by_path]
         policy_ids = {c.subject for c in res.claims if c.predicate == EdgeType.GOVERNS and c.object == e.id
                       and c.mode != "proposed"}
-        policies = [(res.entities[p], sources[res.entities[p].properties["path"]]) for p in policy_ids
+        policies = [(res.entities[p], sources[res.entities[p].properties["path"]]) for p in sorted(policy_ids)
                     if res.entities[p].properties.get("path") in sources]
         context_files = spec_files + [by_path[s.path] for _, s in policies if s.path in by_path]
         tasks.append(X.review_code(name, code_files, [f for f in spec_files if f.source.path.endswith(".md")], policies))
@@ -116,6 +116,8 @@ async def llm_stage(files: list[RoutedFile], res: ParseResult, resolver: Resolve
     for (eid, code_files, ctx), rv in zip(meta, reviews):
         if rv:
             X.apply_code_review(rv, eid, code_files, ctx, res, audit)
+    from etl_pipeline.policy_linker import link_policies
+    await link_policies(res, run_audit)
     t0 = time.time()
     await reconcile(res, use_llm=run_judge, audit=run_audit)
     run_audit["timings"]["judge_s"] = round(time.time() - t0, 1)
@@ -237,7 +239,7 @@ def run(repo: Path, use_llm: bool, run_judge: bool, load: bool) -> ContextGraph:
         "sources_by_tier": dict(Counter(s.tier for s in g.sources)),
         "edge_status": dict(Counter(e.status for e in g.edges)),
         "risk_categories": dict(Counter(r.category for r in g.risks)),
-        "extraction": ex_audit.__dict__, "refused_merges": resolver.refused,
+        "extraction": {**ex_audit.__dict__, "ontology_coerced_count": len(ex_audit.ontology_coerced)}, "refused_merges": resolver.refused,
         "llm_stats": dict(llm.STATS),
     }
     g.audit["integrity"] = integrity_checks(g)
@@ -262,8 +264,16 @@ def main() -> None:
     ap.add_argument("--no-llm", action="store_true", help="deterministic parsers only (ablation / offline)")
     ap.add_argument("--no-judge", action="store_true", help="LLM extraction without the adversarial judge (ablation)")
     ap.add_argument("--no-load", action="store_true", help="do not load into Neo4j")
+    ap.add_argument("--load-only", action="store_true", help="(re)load the existing graph JSON into Neo4j")
     args = ap.parse_args()
+    if args.load_only:
+        logging.basicConfig(level=logging.INFO)
+        from knowledge_store.neo4j_client import load_graph
+        print(load_graph(ContextGraph.model_validate_json(config.GRAPH_JSON.read_text())))
+        return
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+    for noisy in ("neo4j.notifications", "LiteLLM", "httpx"):
+        logging.getLogger(noisy).setLevel(logging.WARNING)
     use_llm = config.llm_enabled() and not args.no_llm
     if not use_llm:
         log.warning("LLM stages disabled (no GEMINI_API_KEY or --no-llm): deterministic extraction only")

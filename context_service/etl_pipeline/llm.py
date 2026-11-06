@@ -109,6 +109,9 @@ async def structured(model: str, system: str, user: str | list, schema: type[T],
                 STATS["retries"] = STATS.get("retries", 0) + 1
                 msg = str(e)
                 quota = "RateLimit" in type(e).__name__ or "429" in msg or "RESOURCE_EXHAUSTED" in msg
+                if "PerDay" in msg:  # daily cap: retrying only burns requests -> fail fast
+                    log.warning("daily quota exhausted for %s; giving up on this call", model)
+                    break
                 delay = min(90, (15 if quota else 4) * 2 ** (transient - 1))
                 log.warning("LLM call failed (%s, try %d, sleeping %ss): %s", model, transient, delay, msg[:200])
                 await asyncio.sleep(delay)
@@ -132,8 +135,8 @@ async def embed(texts: list[str]) -> list[list[float]] | None:
         else:
             missing.append(i)
     import litellm
-    for start in range(0, len(missing), 64):
-        batch = missing[start:start + 64]
+    for start in range(0, len(missing), 20):  # free tier counts each text against a per-minute cap
+        batch = missing[start:start + 20]
         try:
             async with _semaphore():
                 STATS["embed_calls"] += 1
@@ -144,8 +147,23 @@ async def embed(texts: list[str]) -> list[list[float]] | None:
                 out[i] = vec
                 _cache_path("emb", _key(config.EMBED_MODEL, str(config.EMBED_DIM), texts[i])).write_text(json.dumps(vec))
         except Exception as e:
-            log.warning("embedding failed: %s", str(e)[:300])
-            return None
+            log.warning("embedding batch failed: %s", str(e)[:200])
+            for attempt in range(5):  # per-minute limits: back off and retry this batch
+                await asyncio.sleep(min(60, 10 * 2 ** attempt))
+                try:
+                    resp = await litellm.aembedding(model=config.EMBED_MODEL, input=[texts[i] for i in batch],
+                                                    dimensions=config.EMBED_DIM, timeout=config.LLM_TIMEOUT_S)
+                    break
+                except Exception as e2:  # noqa: BLE001
+                    log.warning("embedding retry %d failed: %s", attempt + 1, str(e2)[:200])
+                    if "PerDay" in str(e2):
+                        return None
+            else:
+                return None
+            for i, item in zip(batch, resp.data):
+                vec = item["embedding"] if isinstance(item, dict) else item.embedding
+                out[i] = vec
+                _cache_path("emb", _key(config.EMBED_MODEL, str(config.EMBED_DIM), texts[i])).write_text(json.dumps(vec))
     return out  # type: ignore[return-value]
 
 

@@ -94,6 +94,12 @@ def load_graph(g: ContextGraph) -> dict:
     run("MATCH (c:Claim)-[:FROM]->(s:Source) WHERE s.path IN $paths DETACH DELETE c", paths=changed + removed)
     run("MATCH (c:Chunk)-[:PART_OF]->(s:Source) WHERE s.path IN $paths DETACH DELETE c", paths=changed + removed)
     run("MATCH (s:Source) WHERE s.path IN $paths DETACH DELETE s", paths=removed)
+    # extraction can change without the file changing (new prompt / model / judge verdict):
+    # drop every claim, chunk and entity that is not part of this build
+    stale = run("""MATCH (c:Claim) WHERE NOT c.id IN $ids WITH c, c.id AS id DETACH DELETE c RETURN count(id) AS n""",
+                ids=[c.id for c in g.claims])[0]["n"]
+    run("MATCH (c:Chunk) WHERE NOT c.id IN $ids DETACH DELETE c", ids=[c["id"] for c in chunks])
+    run("MATCH (e:Entity) WHERE NOT e.id IN $ids DETACH DELETE e", ids=[e.id for e in g.entities])
     # aggregates & risks are derived data -> rebuilt every load (cheap, keeps them consistent with claims)
     run("MATCH (:Entity)-[r]->(:Entity) DELETE r")
     run("MATCH (r:Risk) DETACH DELETE r")
@@ -164,9 +170,9 @@ def load_graph(g: ContextGraph) -> dict:
            WITH k, r
            FOREACH (_ IN CASE WHEN r.embedding IS NULL THEN [] ELSE [1] END | SET k.embedding = r.embedding)
            WITH k, r
-           CALL { WITH k, r UNWIND r.entities AS eid MATCH (e:Entity {id: eid}) MERGE (k)-[:CONCERNS]->(e) }
-           CALL { WITH k, r UNWIND r.claim_ids AS cid MATCH (c:Claim {id: cid}) MERGE (k)-[:EVIDENCED_BY]->(c) }
-           CALL { WITH k, r UNWIND r.files AS f MATCH (s:Source {path: f}) MERGE (k)-[:CITES]->(s) }""",
+           CALL (k, r) { UNWIND r.entities AS eid MATCH (e:Entity {id: eid}) MERGE (k)-[:CONCERNS]->(e) }
+           CALL (k, r) { UNWIND r.claim_ids AS cid MATCH (c:Claim {id: cid}) MERGE (k)-[:EVIDENCED_BY]->(c) }
+           CALL (k, r) { UNWIND r.files AS f MATCH (s:Source {path: f}) MERGE (k)-[:CITES]->(s) }""",
         rows=risk_rows)
 
     chunk_rows = [{**{k: c[k] for k in ("id", "file_path", "line_start", "line_end", "tier", "date", "kind", "scope",
@@ -184,14 +190,15 @@ def load_graph(g: ContextGraph) -> dict:
     run("""MATCH (e:Entity) WHERE NOT (e)--() AND NOT e.id IN $ids DETACH DELETE e""",
         ids=[e.id for e in g.entities])
     integrity = run("""
-        CALL { MATCH (c:Claim) WHERE NOT (c)-[:SUBJECT]->() OR NOT (c)-[:OBJECT]->() OR NOT (c)-[:FROM]->()
+        CALL () { MATCH (c:Claim) WHERE NOT (c)-[:SUBJECT]->() OR NOT (c)-[:OBJECT]->() OR NOT (c)-[:FROM]->()
                RETURN count(c) AS dangling_claims }
-        CALL { MATCH (r:Risk) WHERE NOT (r)-[:CITES]->() RETURN count(r) AS risks_without_evidence }
-        CALL { MATCH (:Entity)-[x]->(:Entity) WHERE x.status = 'VERIFIED'
+        CALL () { MATCH (r:Risk) WHERE NOT (r)-[:CITES]->() RETURN count(r) AS risks_without_evidence }
+        CALL () { MATCH (:Entity)-[x]->(:Entity) WHERE x.status = 'VERIFIED'
                AND NOT EXISTS { MATCH (c:Claim) WHERE c.id IN x.claim_ids AND c.tier = 1 }
                RETURN count(x) AS verified_without_tier1 }
         RETURN dangling_claims, risks_without_evidence, verified_without_tier1""")[0]
-    stats = {"changed_sources": len(changed), "removed_sources": len(removed), **sem, "integrity": integrity}
+    stats = {"changed_sources": len(changed), "removed_sources": len(removed), "stale_claims_removed": stale, **sem,
+             "integrity": integrity}
     log.info("Neo4j load complete: %s", stats)
     (config.OUT_DIR / "neo4j_load.json").write_text(json.dumps(stats, indent=1))
     return stats
@@ -252,7 +259,7 @@ class Neo4jGraph:
     def reverse_impact(self, eid: str, depth: int) -> list[dict]:
         types = "|".join(e.value for e in IMPACT_EDGES)
         rows = run(f"""MATCH p = (x:Entity)-[:{types}*1..{int(depth)}]->(t:Entity {{id: $id}})
-                       WHERE all(r IN relationships(p) WHERE NOT r.status IN ['SUPERSEDED', 'REJECTED'])
+                       WHERE all(r IN relationships(p) WHERE r.status IN ['VERIFIED', 'DOCUMENTED'])
                          AND x <> t
                        WITH x, p ORDER BY length(p) ASC
                        WITH x, collect(p)[0] AS p

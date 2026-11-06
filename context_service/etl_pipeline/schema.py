@@ -246,6 +246,17 @@ class LLMDocBatch(BaseModel):
     documents: list[LLMDocBatchItem] = Field(description="one entry per input document, in input order")
 
 
+class LLMMergeItem(BaseModel):
+    entity_id: str
+    canonical: str = Field(description="catalog id this entity denotes, or '' if it is a different/unknown thing")
+    confidence: float = Field(ge=0.0, le=1.0)
+    reason: str
+
+
+class LLMMergeDecision(BaseModel):
+    items: list[LLMMergeItem]
+
+
 class LLMDiagramBox(BaseModel):
     label: str
     kind: str = Field(description="service | frontend | datastore | table | team | external | process | note")

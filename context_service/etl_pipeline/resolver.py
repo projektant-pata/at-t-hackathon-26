@@ -178,3 +178,26 @@ class Resolver:
             ent = self.res.entities[eid]
             ent.grounded_tier = min(ent.grounded_tier, tier)
         return eid
+
+
+def merge_entity(res: ParseResult, src: str, dst: str) -> int:
+    """Rewrite every claim from `src` to `dst`, carry the name over as an alias, drop `src`."""
+    n = 0
+    for c in res.claims:
+        changed = False
+        if c.subject == src:
+            c.subject, changed = dst, True
+        if c.object == src:
+            c.object, changed = dst, True
+        if changed:
+            c.compute_id()
+            n += 1
+    old = res.entities.pop(src, None)
+    if old is not None:
+        tgt = res.entities[dst]
+        for a in [old.name, *old.aliases]:
+            if a and a not in tgt.aliases and a != tgt.name:
+                tgt.aliases.append(a)
+        tgt.properties.setdefault("merged_from", []).append(src)
+    res.claims = [c for c in res.claims if c.subject != c.object]
+    return n

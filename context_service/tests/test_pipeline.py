@@ -260,3 +260,17 @@ def test_negated_claim_against_existing_column_is_flagged(files, base):
     edge = next(e for e in aggregate_edges(base) if e.target == "column:user-service.users.customer_tier"
                 and e.type == EdgeType.HAS_COLUMN)
     assert edge.status == "VERIFIED"  # the doc's denial never overrides runtime truth
+
+
+def test_merge_entity_rewrites_claims_and_keeps_alias(files, base):
+    from etl_pipeline.resolver import merge_entity
+    from etl_pipeline.schema import NodeType
+    base.entity("app:operations-console", NodeType.FRONTEND_APP, "Operations console", tier=3)
+    src = next(f.source for f in files if f.source.path == "diagrams/architecture-september.png")
+    base.claim(src, "app:operations-console", EdgeType.CALLS, "service:api-gateway", "box arrow", None, "vlm:test",
+               mode="proposed")
+    n = merge_entity(base, "app:operations-console", "app:admin")
+    assert n == 1 and "app:operations-console" not in base.entities
+    assert "Operations console" in base.entities["app:admin"].aliases
+    assert any(c.subject == "app:admin" and c.mode == "proposed" and c.provenance.file_path == src.path
+               for c in base.claims)

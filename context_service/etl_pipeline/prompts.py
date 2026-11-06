@@ -157,3 +157,17 @@ JUDGE_USER = """Entity cluster: {cluster}
 {candidates}
 
 Return JSON for the schema."""
+
+MERGE_SYSTEM = """You are an entity-resolution agent for an engineering knowledge graph.
+Some runtime components were mentioned only in documents or diagrams and could not be matched to a component
+that exists in code. For each, decide whether it denotes one of the code-verified catalog components
+(a nickname, a role name such as 'operations console', an old name) or a different / non-existent thing.
+Be conservative: merge only when the quoted mentions clearly describe the same component (same role, same
+interactions). Different products that merely share a word are NOT the same. If unsure, return canonical ''."""
+
+MERGE_USER = """== CODE-VERIFIED CATALOG (id | name | aliases | summary) ==
+{catalog}
+
+== UNRESOLVED ENTITIES (id | name | quoted mentions) ==
+{entities}
+Return JSON for the schema."""

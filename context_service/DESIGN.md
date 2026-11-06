@@ -109,22 +109,26 @@ one image.
 
 **C. Metrics and ablation.** `python -m eval.run_eval --ablation` writes `out/eval_report.md`. It rebuilds the graph three ways (deterministic only, LLM extraction without the judge, the full pipeline) and reports recall, decoy false links, positive controls and probe hit rate. This shows what each layer adds. The LLM cache makes repeat runs free.
 
-**Measured results.** These come from the run on 2026-11-06. Models were free-tier Gemini 3 Flash and Flash-Lite. The free tier caps each model at 20 requests per day, so 7 of the 14 extraction batches fell back to Flash-Lite.
+**Measured results.** These come from the paid-tier run on 2026-11-06:
+- `gemini-3.5-flash` for extraction, vision and code review.
+- `gemini-3.1-pro-preview` for the judge and the entity-resolution agent.
+- A full build makes 37 LLM calls, uses about 170k input and 190k output tokens, costs **$1.36** and takes about 4 minutes. A cached re-run costs $0.
 
 | Variant | Golden recall (G1–G10) | Both sides cited | Decoy false links | Positive controls | Probes |
 |---|---|---|---|---|---|
 | Deterministic parsers + security rules only | 2/10 | 0/10 | 0/8 | 6/6 | 4/7 |
-| + LLM/VLM extraction, grounding and policy linking (no judge) | 4/10 | 3/10 | 0/8 | 6/6 | 6/7 |
-| + adversarial judge (full pipeline) | **7/10** | **6/10** | **0/8** | **6/6** | **6/7** |
+| + LLM/VLM extraction, grounding, policy linking, entity resolution (no judge) | 7/10 | 6/10 | 0/8 | 6/6 | 7/7 |
+| + adversarial judge (full pipeline) | **9/10** | **8/10** | **0/8** | **6/6** | **7/7** |
 
-The integrity checks pass in every variant. The grounding gate rejected 1.7% of LLM claims.
+Integrity checks pass in every variant, and the grounding gate rejected 0% of the LLM claims in this run.
 
-Misses and their causes:
-- **G4 (ownership drift).** The Flash-Lite fallback mislabelled the wiki owner. The stronger Flash model extracted it correctly in an earlier run, and that run passed G4.
-- **G7 (PII vs. logging standard).** Flash-Lite extracted no policy from `wiki/logging-standard.md`. When that policy exists, the policy linker connects it at cosine 0.835.
-- **G5 (target-state diagram vs. direct console call).** The diagram box "Operations console" was not resolved to `app:admin`. This needs either embedding-based entity resolution or a stronger VLM.
+The earlier free-tier run reached 7/10 because quota fallbacks pushed half the extraction onto Flash-Lite. Model quality on extraction matters more than any other single factor.
 
-All three are extraction-quality limits, not design limits, and a paid-tier run should close most of them.
+**G5, the remaining miss, is a judgement call and was not tuned away.**
+- What the system does: it labels the September diagram PROPOSED (a target state), labels the console → inventory call VERIFIED, and cites ADR-005, EDGE-53 and v1.4 as the sanctioned exception.
+- Why the judge raised no stale flag: it decided `commerce-access.md` is not stale because that page itself says the topology "assumes that migration".
+- What the golden set expects: a stale flag on that page, because ADR-005 says *"The gateway architecture page needs an update."*
+- Something the judge found that the golden set never listed: ADR-005 allows direct calls only for stock *adjustments*, but `apps/admin/src/app/index.tsx:39` also *reads* products from inventory directly. This was verified against the sources.
 
 > Overfitting caveat: the golden set was hand-built from this corpus. To mitigate this, **no file names or corpus-specific rules live in the pipeline**. Only `eval/` references them. Every rule is a generic pattern.
 

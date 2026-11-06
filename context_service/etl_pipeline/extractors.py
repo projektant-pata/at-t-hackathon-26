@@ -19,7 +19,7 @@ from etl_pipeline.grounding import ground
 from etl_pipeline.parsers.common import ParseResult, scope_prefix
 from etl_pipeline.resolver import Resolver
 from etl_pipeline.router import RoutedFile
-from etl_pipeline.schema import (type_check, EdgeType, Entity, EvidenceRef, LLMCodeReview, LLMArrowVerification, LLMDocBatch,
+from etl_pipeline.schema import (type_check, LLMMergeDecision, EdgeType, Entity, EvidenceRef, LLMCodeReview, LLMArrowVerification, LLMDocBatch,
                                  LLMDiagramExtraction, LLMDocExtraction, NodeType, Risk, SourceDoc)
 
 log = logging.getLogger("extractors")
@@ -359,3 +359,41 @@ def apply_code_review(review: LLMCodeReview, service_eid: str, code_files: list[
         r.compute_id()
         res.risks.append(r)
         audit.code_findings += 1
+
+
+
+# --------------------------------------------------------------------------- entity-resolution agent
+async def resolve_unmatched_runtime(res: ParseResult, audit: dict) -> None:
+    """Doc/diagram-only runtime entities -> LLM decides whether they are a code-verified component."""
+    from etl_pipeline.resolver import merge_entity
+    runtime = (NodeType.SERVICE, NodeType.FRONTEND_APP)
+    verified = [e for e in res.entities.values() if e.type in runtime and e.scope == "live" and e.grounded_tier == 1]
+    unresolved = [e for e in res.entities.values() if e.type in runtime and e.scope == "live" and e.grounded_tier > 2]
+    if not unresolved or not verified:
+        audit["entity_resolution"] = {"unresolved": len(unresolved), "merged": []}
+        return
+    mentions = {}
+    for c in res.claims:
+        for eid in (c.subject, c.object):
+            if any(eid == u.id for u in unresolved):
+                mentions.setdefault(eid, []).append(f"[{c.provenance.file_path}] {c.provenance.snippet[:200]}")
+    vmention: dict[str, list[str]] = {}
+    for c in res.claims:
+        if c.provenance.tier >= 3:
+            for eid in (c.subject, c.object):
+                if eid in {e.id for e in verified} and len(vmention.setdefault(eid, [])) < 2:
+                    vmention[eid].append(f"[{c.provenance.file_path}] {c.provenance.snippet[:160]}")
+    cat = "\n".join(f"{e.id} | {e.name} | {', '.join(e.aliases)} | " + " || ".join(vmention.get(e.id, []))
+                    for e in verified)
+    ents = "\n".join(f"{u.id} | {u.name} | " + " || ".join(mentions.get(u.id, [])[:4]) for u in unresolved)
+    out = await llm.structured(config.JUDGE_MODEL, prompts.MERGE_SYSTEM,
+                               prompts.MERGE_USER.format(catalog=cat, entities=ents), LLMMergeDecision)
+    merged = []
+    valid = {e.id for e in verified}
+    for it in (out.items if out else []):
+        if it.canonical in valid and it.entity_id in res.entities and it.confidence >= 0.7:
+            n = merge_entity(res, it.entity_id, it.canonical)
+            merged.append({"from": it.entity_id, "to": it.canonical, "confidence": it.confidence,
+                           "claims_rewritten": n, "reason": it.reason[:200]})
+    audit["entity_resolution"] = {"unresolved": len(unresolved), "merged": merged,
+                                  "kept_separate": [u.id for u in unresolved if u.id in res.entities]}

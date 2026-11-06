@@ -93,6 +93,8 @@ async def llm_stage(files: list[RoutedFile], res: ParseResult, resolver: Resolve
         else:
             audit.rejected_schema.append(f"{f.source.path}: diagram extraction failed")
 
+    await X.resolve_unmatched_runtime(res, run_audit)
+
     # code review per backend service, with its contract + policies that govern it
     by_path = {f.source.path: f for f in files}
     sources = {f.source.path: f.source for f in files}

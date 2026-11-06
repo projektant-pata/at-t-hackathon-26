@@ -52,3 +52,9 @@ The perturbation test copied the corpus into another common layout (`services/`,
 ## Done
 
 - [x] Contradiction lookup walks up from a column to its table and then its service. A parent's risks are passed down only when they mention the entity (`hybrid_retriever._risks_with_lineage`).
+- [x] `negated` assertion mode plus a negation-drift check. A doc saying "no column yet" is now compared against migrations.
+- [x] LLM entity-resolution agent for runtime entities that appear only in docs. It is conservative: decoys stay separate.
+- [x] Paid-tier run: 9/10 golden recall, 0 decoy false links, 7/7 probes, $1.36 per full build.
+
+## Open evaluation item
+- [ ] **G5.** Decide whether "doc A says doc B needs an update" should become a claim. ADR-005 says this about the gateway page. If so, extract it as `record -MENTIONS(stale)-> doc` and flag the target doc. Validate this on held-out data (T7), not on G5 alone.

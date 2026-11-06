@@ -16,5 +16,68 @@ services:
       test: ["CMD-SHELL", "wget -qO- http://localhost:7474 || exit 1"]
       interval: 5s
       retries: 20
+
+  # ---------------------------------------------------------------- Context Service
+  # One-shot agentic ETL:  docker compose run --rm context-etl
+  context-etl:
+    build: &cs_build
+      context: ./context_service
+      args: { UID: "${HOST_UID:-1000}", GID: "${HOST_GID:-1000}" }
+    image: context-service:local
+    profiles: [etl]
+    command: ["python", "-m", "etl_pipeline.run_etl"]
+    env_file: &cs_env_file
+      - path: .env
+        required: false
+    environment: &cs_env
+      NEO4J_URI: bolt://neo4j:7687
+      NEO4J_USER: neo4j
+      NEO4J_PASSWORD: ${NEO4J_PASSWORD}
+      REPO_ROOT: /corpus
+      CS_GRAPH_BACKEND: neo4j
+    volumes:
+      - ./att-hackathon-task:/corpus:ro     # source corpus (citations resolve against it)
+      - ./context_service/out:/app/out      # graph JSON, audit + eval reports
+      - ./context_service/.cache:/app/.cache   # LLM/embedding cache -> re-runs are free & reproducible
+    depends_on:
+      neo4j: { condition: service_healthy }
+
+  # REST API (OpenAPI docs at http://127.0.0.1:8000/docs)
+  context-api:
+    image: context-service:local
+    build: *cs_build
+    command: ["uvicorn", "delivery_gateway.api_server:app", "--host", "0.0.0.0", "--port", "8000"]
+    env_file: *cs_env_file
+    environment: *cs_env
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - ./att-hackathon-task:/corpus:ro
+      - ./context_service/out:/app/out:ro
+      - ./context_service/.cache:/app/.cache
+    depends_on:
+      neo4j: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
+      interval: 10s
+      retries: 10
+
+  # MCP server for IDE agents (streamable HTTP at http://127.0.0.1:8765/mcp)
+  context-mcp:
+    image: context-service:local
+    build: *cs_build
+    command: ["python", "-m", "delivery_gateway.mcp_server", "--transport", "streamable-http",
+              "--host", "0.0.0.0", "--port", "8765"]
+    env_file: *cs_env_file
+    environment: *cs_env
+    ports:
+      - "127.0.0.1:8765:8765"
+    volumes:
+      - ./att-hackathon-task:/corpus:ro
+      - ./context_service/out:/app/out:ro
+      - ./context_service/.cache:/app/.cache
+    depends_on:
+      neo4j: { condition: service_healthy }
+
 volumes:
   neo4j_data:

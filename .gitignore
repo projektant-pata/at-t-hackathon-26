@@ -1,0 +1,6 @@
+.env
+context_service/out/
+context_service/.cache/
+context_service/.venv/
+__pycache__/
+.pytest_cache/

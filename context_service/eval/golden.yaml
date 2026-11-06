@@ -1,0 +1,225 @@
+# Golden validation set hand-mapped from the planted problems in att-hackathon-task.
+# Only eval/ references concrete file names - the pipeline itself contains no corpus-specific rules.
+#
+# Risk cases pass when ONE risk has a category in `categories`, cites >= 1 file from `claim_side`
+# and >= 1 file from `truth_side` (when require_both), and concerns one of `entities_any` (if given).
+
+risk_cases:
+  - id: G1
+    name: Accounts v1 vs v2 (stale wiki + customer-schema doc)
+    categories: [STALE_DOC, CONTRADICTION]
+    claim_side: [wiki/accounts-http.md, docs/reference/customer-schema.md, api-specs/history/accounts-v1]
+    truth_side: [apps/user-service/migrations/002-account-tiers.sql, api-specs/user-service.openapi.json,
+                 apps/user-service/src/index.ts, issues/ACC-42.md, releases/2026-03-v1.0.md, api-specs/user-service.md]
+    require_both: true
+    current_truth: "/v2/users/:id with display_name, account_status, customer_tier"
+  - id: G2
+    name: Money decimal vs minor units
+    categories: [STALE_DOC, CONTRADICTION]
+    claim_side: [wiki/orders-client.md, diagrams/customer-orders-erd.png]
+    truth_side: [apps/order-service/migrations/002-minor-units.sql, docs/adr/002-minor-units.md, issues/ORD-76.md,
+                 apps/order-service/src/index.ts, api-specs/order-service, releases/2026-03-v1.0.md]
+    require_both: true
+    current_truth: "orders.total_minor INTEGER; total dropped"
+  - id: G3
+    name: Redis read cache removed
+    categories: [STALE_DOC, CONTRADICTION, UNVERIFIED_ASSUMPTION]
+    claim_side: [wiki/inventory-service.md, diagrams/architecture-january.png]
+    truth_side: [docs/adr/003-stock-cache.md, issues/INV-190.md, releases/2026-06-v1.3.md,
+                 meeting-notes/2026-06-04-cache-removal.md, incidents/2026-06-02-stock-read.md, compose.yaml,
+                 apps/inventory-service/app.py]
+    require_both: true
+    current_truth: "no cache dependency for inventory-service"
+  - id: G4
+    name: Stock ownership moved to Supply Operations
+    categories: [OWNERSHIP_DRIFT, STALE_DOC, CONTRADICTION]
+    claim_side: [wiki/inventory-service.md]
+    truth_side: [.github/CODEOWNERS, meeting-notes/2026-06-25-stock-handover.md, releases/2026-07-v1.4.md]
+    require_both: true
+    current_truth: "owner = Supply Operations since 2026-07-01"
+  - id: G5
+    name: Gateway-only diagram vs admin direct call to inventory
+    categories: [CONTRADICTION, UNDOCUMENTED_DEP, STALE_DOC, UNVERIFIED_ASSUMPTION]
+    claim_side: [diagrams/architecture-september.png, docs/architecture/commerce-access.md]
+    truth_side: [apps/admin/.env.example, apps/admin/src/app/index.tsx, docs/adr/005-support-access.md,
+                 issues/EDGE-53.md, meeting-notes/2026-07-16-console-exception.md, releases/2026-07-v1.4.md,
+                 docs/reference/runtime-configuration.md]
+    require_both: true
+    current_truth: "admin -> inventory-service direct CALLS is VERIFIED; September diagram is a target state"
+  - id: G6
+    name: IDOR on GET /v1/orders/:id
+    categories: [SECURITY, POLICY_VIOLATION]
+    claim_side: [api-specs/order-service, issues/SEC-22.md, wiki/support-access.md]
+    truth_side: [apps/order-service/src/index.ts]
+    require_both: false
+    entities_any: [service:order-service, "endpoint:order-service:GET /v1/orders/{}"]
+    current_truth: "scope order reads by customer_id"
+  - id: G7
+    name: PII in logs (hr-service)
+    categories: [SECURITY, POLICY_VIOLATION]
+    claim_side: [wiki/logging-standard.md, issues/SEC-29.md, incidents/2026-09-16-directory-observability.md]
+    truth_side: [apps/hr-service/src/Main.java]
+    require_both: true
+    entities_any: [service:hr-service]
+    current_truth: "code violates the logging standard; mask email/snapshot"
+  - id: G8
+    name: Payment idempotency not enforced
+    categories: [POLICY_VIOLATION, SECURITY, BUG]
+    claim_side: [api-specs/payment-service, issues/PAY-118.md, incidents/2026-08-19-payment-retry.md,
+                 docs/runbooks/charge-retry.md]
+    truth_side: [apps/payment-service/src/index.ts]
+    require_both: true
+    entities_any: [service:payment-service]
+    current_truth: "key stored but never looked up -> duplicate charges"
+  - id: G9
+    name: Last-unit off-by-one in availability
+    categories: [POLICY_VIOLATION, BUG, CONTRADICTION]
+    claim_side: [api-specs/inventory-service, issues/INV-207.md, incidents/2026-09-03-final-unit.md,
+                 meeting-notes/2026-09-03-stock-triage.md]
+    truth_side: [apps/inventory-service/app.py]
+    require_both: true
+    entities_any: [service:inventory-service]
+    current_truth: "comparison should be <"
+  - id: G10
+    name: Spoofable demo identity header / wildcard CORS
+    categories: [SECURITY]
+    claim_side: [wiki/support-access.md, api-specs/order-service]
+    truth_side: [packages/demo-identity/src/index.ts, apps/api-gateway/src/platform.ts, apps/order-service/src/platform.ts,
+                 apps/inventory-service/app.py]
+    require_both: false
+    current_truth: "header identity is demo-only and fails open to cus-001"
+
+graph_assertions:
+  # ---- decoys: must NOT link / must NOT be VERIFIED
+  - id: D1
+    name: archive PaymentService is not the live payment-service
+    type: no_link_between_scopes
+    archive_prefix: "archive/conference-registration::"
+    live_entities: [service:payment-service, service:user-service]
+    also_files: [wiki/conference-payments.md, archive/conference-registration/]
+  - id: D2
+    name: facilities-tracker Inventory is not inventory-service
+    type: no_link_between_scopes
+    archive_prefix: "archive/facilities-tracker::"
+    live_entities: [service:inventory-service, table:inventory-service.products]
+    also_files: [wiki/equipment-tracker.md, archive/facilities-tracker/, issues/LAB-12.md]
+  - id: D3
+    name: People<->Accounts SSO is only proposed
+    type: no_live_dependency_claims_from_files
+    files: [docs/adr/004-people-sso.md, issues/PEOPLE-71.md, diagrams/people-identity-workshop.png,
+            meeting-notes/2026-08-06-people-identity.md]
+    predicates: [CALLS, DEPENDS_ON]
+    except_pairs: [[service:hr-service, service:user-service]]   # the limited read integration is real (P1)
+  - id: D4
+    name: Email-based account matching was rejected
+    type: no_live_dependency_claims_from_files
+    files: [issues/PEOPLE-64.md, docs/design/people-account-link.md]
+    predicates: [CALLS, DEPENDS_ON, READS_WRITES]
+    targets_contain: [email]
+  - id: D5
+    name: HR -> Finance CSV is a manual process, not a service call
+    type: no_live_edge
+    source_any: [service:hr-service, app:hr-portal, app:employee-mobile]
+    target_contains: [finance, payroll]
+    types: [CALLS, DEPENDS_ON]
+  - id: D6
+    name: MongoDB / PostgreSQL are only production analogues
+    type: no_live_edge
+    source_prefix: ["service:", "app:"]
+    target_contains: [mongo, postgres]
+    types: [DEPENDS_ON, READS_WRITES, CALLS]
+  - id: D7
+    name: No external payment provider call (provider-retry theory ruled out)
+    type: no_live_edge
+    source_any: [service:payment-service]
+    target_contains: [""]
+    types: [CALLS]
+  - id: D8
+    name: Engineering Journal blog has no runtime edges to commerce services
+    type: no_live_edge
+    source_any: [app:blog]
+    target_contains: ["service:"]
+    types: [CALLS, DEPENDS_ON]
+  # ---- positive controls
+  - id: P1
+    name: hr-service -> user-service customer-account lookup is VERIFIED
+    type: edge_status
+    source: service:hr-service
+    target: service:user-service
+    edge_type: CALLS
+    allowed: [VERIFIED]
+  - id: P2a
+    name: order-service -> user-service VERIFIED
+    type: edge_status
+    source: service:order-service
+    target: service:user-service
+    edge_type: CALLS
+    allowed: [VERIFIED]
+  - id: P2b
+    name: order-service -> inventory-service VERIFIED
+    type: edge_status
+    source: service:order-service
+    target: service:inventory-service
+    edge_type: CALLS
+    allowed: [VERIFIED]
+  - id: P2c
+    name: order-service -> payment-service VERIFIED
+    type: edge_status
+    source: service:order-service
+    target: service:payment-service
+    edge_type: CALLS
+    allowed: [VERIFIED]
+  - id: P2d
+    name: admin -> inventory-service direct call VERIFIED
+    type: edge_status
+    source: app:admin
+    target: service:inventory-service
+    edge_type: CALLS
+    allowed: [VERIFIED]
+  - id: P3
+    name: accurate docs are not flagged stale
+    type: no_stale_flag_on_files
+    files: [docs/reference/order-lifecycle.md, releases/2026-06-v1.3.md]
+
+probes:
+  - id: Q1
+    name: Who owns inventory-service?
+    call: who_owns
+    args: ["Stock"]
+    expect_all: ["team:supply-operations"]
+    expect_any: ["wiki/inventory-service.md", "OWNERSHIP_DRIFT", "core-platform"]
+  - id: Q2
+    name: Why were customers charged twice?
+    call: query
+    args: ["Why were customers charged twice after a retry?"]
+    expect_all: ["PAY-118", "apps/payment-service/src/index.ts"]
+    expect_any: ["2026-08-19", "ledger-sim", "provider"]
+  - id: Q3
+    name: What breaks if I change the users table?
+    call: change_impact
+    args: ["users table"]
+    expect_all: ["service:user-service", "service:order-service", "service:api-gateway", "service:hr-service",
+                 "app:storefront", "app:admin"]
+  - id: Q4
+    name: Can the admin console call inventory directly?
+    call: query
+    args: ["Can the admin operations console call the inventory service directly instead of the gateway?"]
+    expect_all: ["[app:admin] -CALLS (VERIFIED"]
+    expect_any: ["ADR-005", "005-support-access", "EDGE-53"]
+  - id: Q5
+    name: Security guidance for order-service
+    call: security_guidance
+    args: ["apps/order-service/src/index.ts"]
+    expect_all: ["customer_id"]
+    expect_any: ["/v1/orders/:id", "/v1/orders/{}", "ownership"]
+  - id: Q6
+    name: Plan uses Redis for inventory
+    call: validate_plan
+    args: ["inventory-service", ["redis cache"]]
+    expect_any: ["\"REJECT\"", "\"UNVERIFIED\""]
+    expect_any_2: ["ADR-003", "003-stock-cache", "only described by documents", "INV-190"]
+  - id: Q7
+    name: Plan uses orders.total
+    call: validate_plan
+    args: ["order-service", ["orders.total"]]
+    expect_all: ["\"REJECT\"", "total_minor"]

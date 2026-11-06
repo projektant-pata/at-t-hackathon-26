@@ -94,6 +94,13 @@ async def structured(model: str, system: str, user: str | list, schema: type[T],
                 extra = {} if "gemini-3" in model else {"temperature": temperature}  # Gemini 3: keep default 1.0
                 resp = await litellm.acompletion(model=model, messages=messages, response_format=schema,
                                                  timeout=config.LLM_TIMEOUT_S, num_retries=0, **extra)
+                try:
+                    usage = resp.usage
+                    STATS["tokens_in"] = STATS.get("tokens_in", 0) + (usage.prompt_tokens or 0)
+                    STATS["tokens_out"] = STATS.get("tokens_out", 0) + (usage.completion_tokens or 0)
+                    STATS["cost_usd"] = round(STATS.get("cost_usd", 0.0) + (litellm.completion_cost(resp) or 0.0), 4)
+                except Exception:  # noqa: BLE001 - pricing table may not know preview models
+                    pass
                 raw = _extract_json(resp.choices[0].message.content or "")
                 parsed = schema.model_validate_json(raw)
                 cp.write_text(parsed.model_dump_json())

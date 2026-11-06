@@ -21,6 +21,8 @@ Assertion modes:
   proposed   - plan, target state, idea, open question, design under review, "should", dashed arrow
   deprecated - the document says it was removed, replaced, retired, or is historical
   rejected   - the document says the idea was explicitly decided against
+  negated    - the document states the relation does NOT exist (e.g. "there is no column for X yet",
+               "the service does not call Y", "no cache is used") - emit the relation it denies, with this mode
 """
 
 DOC_SYSTEM = """You are a meticulous knowledge-graph extraction agent for an enterprise engineering Context Service.

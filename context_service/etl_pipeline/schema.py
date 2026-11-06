@@ -88,7 +88,7 @@ def type_check(predicate: str, subject_type: str, object_type: str) -> bool:
 
 
 Modality = Literal["code", "sql", "config", "api_spec", "doc", "diagram"]
-AssertionMode = Literal["observed", "asserted", "proposed", "deprecated", "rejected"]
+AssertionMode = Literal["observed", "asserted", "proposed", "deprecated", "rejected", "negated"]
 EdgeStatus = Literal["VERIFIED", "DOCUMENTED", "ASSERTED", "PROPOSED", "SUPERSEDED", "CONTRADICTED", "REJECTED"]
 RiskCategory = Literal["SECURITY", "POLICY_VIOLATION", "CONTRADICTION", "STALE_DOC", "OWNERSHIP_DRIFT",
                        "UNDOCUMENTED_DEP", "UNVERIFIED_ASSUMPTION", "BUG"]
@@ -213,7 +213,7 @@ class LLMClaim(BaseModel):
     predicate: str = Field(description="One of the EdgeType values")
     object: str
     object_type: str
-    mode: str = Field(description="observed | asserted | proposed | deprecated | rejected")
+    mode: str = Field(description="observed | asserted | proposed | deprecated | rejected | negated")
     snippet: str = Field(description="Verbatim quote (<= 300 chars) from the document supporting this claim")
 
 

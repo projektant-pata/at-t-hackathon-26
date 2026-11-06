@@ -210,3 +210,53 @@ def test_name_resolution_prefix_and_generic_words():
     assert resolve_name("redis cache", idx) == "datastore:redis"
     assert resolve_name("users table", idx) == "table:user-service.users"
     assert resolve_name("Stock", idx) == "service:inventory-service"
+
+
+def test_contradictions_walk_up_containers():
+    """Risks on a parent table are surfaced for a column only when they mention it (no blanket inheritance)."""
+    from knowledge_store.hybrid_retriever import ContextService
+
+    class FakeRepo:
+        edges = [{"source": "service:s", "type": "READS_WRITES", "target": "table:s.t", "status": "VERIFIED"},
+                 {"source": "table:s.t", "type": "HAS_COLUMN", "target": "column:s.t.tier", "status": "VERIFIED"},
+                 {"source": "table:s.t", "type": "HAS_COLUMN", "target": "column:s.t.email", "status": "VERIFIED"}]
+        _risks = [{"id": "r1", "category": "STALE_DOC", "title": "Doc says tier has no column yet", "description": "",
+                   "entities": ["table:s.t"], "evidence": []},
+                  {"id": "r2", "category": "STALE_DOC", "title": "Doc lists old status values", "description": "",
+                   "entities": ["table:s.t"], "evidence": []}]
+
+        def entity_index(self):
+            return {}
+
+        def edges_of(self, ids, direction="both", with_evidence=True):
+            ids = set(ids)
+            return [e for e in self.edges if (direction in ("out", "both") and e["source"] in ids)
+                    or (direction in ("in", "both") and e["target"] in ids)]
+
+        def risks(self, entity_ids=None, categories=None):
+            return [r for r in self._risks if entity_ids is None or set(entity_ids) & set(r["entities"])]
+
+        def claims_for(self, eid):
+            return []
+
+    svc = ContextService(FakeRepo())
+    assert svc._ancestors("column:s.t.tier") == ["table:s.t", "service:s"]
+    tier = svc._risks_with_lineage("column:s.t.tier")
+    assert [(r["id"], r["match"]) for r in tier] == [("r1", "inherited from table:s.t")]
+    assert svc._risks_with_lineage("column:s.t.email") == []
+
+
+def test_negated_claim_against_existing_column_is_flagged(files, base):
+    resolver = Resolver(base)
+    audit = X.ExtractionAudit()
+    doc = _routed(files, "docs/reference/customer-schema.md")
+    ext = LLMDocExtraction(summary="schema", claims=[
+        LLMClaim(subject="table:user-service.users", subject_type="TABLE", predicate="HAS_COLUMN",
+                 object="column:user-service.users.customer_tier", object_type="COLUMN", mode="negated",
+                 snippet="The proposed commercial tier work has no approved database column yet.")])
+    X.apply_doc_extraction(ext, doc, resolver, base, audit)
+    cands = [k for k in find_candidates(base) if k.kind == "negation_drift"]
+    assert cands and "customer_tier" in cands[0].description and cands[0].truth_claim_ids
+    edge = next(e for e in aggregate_edges(base) if e.target == "column:user-service.users.customer_tier"
+                and e.type == EdgeType.HAS_COLUMN)
+    assert edge.status == "VERIFIED"  # the doc's denial never overrides runtime truth

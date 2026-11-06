@@ -26,7 +26,7 @@ log = logging.getLogger("extractors")
 
 MONTHS = {m: i for i, m in enumerate(["january", "february", "march", "april", "may", "june", "july", "august",
                                       "september", "october", "november", "december"], 1)}
-VALID_MODES = {"observed", "asserted", "proposed", "deprecated", "rejected"}
+VALID_MODES = {"observed", "asserted", "proposed", "deprecated", "rejected", "negated"}
 
 
 @dataclass

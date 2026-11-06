@@ -104,6 +104,44 @@ class ContextService:
                     fam.add(e["target"])
         return fam
 
+    def _ancestors(self, eid: str, max_hops: int = 3) -> list[str]:
+        """Containers of an entity, walking *up*: column -> table -> service, endpoint -> service."""
+        out, frontier = [], [eid]
+        for _ in range(max_hops):
+            nxt = []
+            for e in self.repo.edges_of(frontier, "in", with_evidence=False):
+                if e["type"] in ("HAS_COLUMN", "EXPOSES", "READS_WRITES") and e["status"] in TRUSTED \
+                        and e["source"] not in out and e["source"] != eid:
+                    out.append(e["source"])
+                    nxt.append(e["source"])
+            frontier = nxt
+            if not frontier:
+                break
+        return out
+
+    def _risks_with_lineage(self, eid: str, categories: list[str] | None = None) -> list[dict]:
+        """Risks on the entity/its parts ("direct"), plus risks on its containers whose evidence or text
+        actually mentions this entity ("inherited"). Each risk is tagged with how it matched."""
+        direct = self.repo.risks(self._family(eid), categories)
+        seen = {r["id"] for r in direct}
+        out = [{**r, "match": "direct"} for r in direct]
+        ancestors = self._ancestors(eid)
+        if not ancestors:
+            return out
+        own_claims = {c["id"] for c in self.repo.claims_for(eid)}
+        leaf = eid.split(":", 1)[-1].split(".")[-1].split(" ")[-1].lower()
+        for r in self.repo.risks(ancestors, categories):
+            if r["id"] in seen:
+                continue
+            ev_hit = any(e.get("claim_id") in own_claims for e in r.get("evidence", []))
+            text = " ".join([r["title"], r["description"], r.get("current_truth", "")] +
+                            [e.get("snippet", "") for e in r.get("evidence", [])]).lower()
+            if ev_hit or (len(leaf) >= 4 and re.search(rf"\b{re.escape(leaf)}\b", text)):
+                via = next(a for a in ancestors if a in r["entities"])
+                out.append({**r, "match": f"inherited from {via}"})
+                seen.add(r["id"])
+        return out
+
     # ------------------------------------------------------------------ main retrieval
     def retrieve(self, query: str, include_unverified: bool = False, max_edges: int | None = None) -> dict:
         max_edges = max_edges or config.MAX_CONTEXT_EDGES
@@ -189,8 +227,8 @@ class ContextService:
         edges = self.repo.edges_of([eid])
         timeline = [{k: c[k] for k in ("date", "file_path", "line_start", "tier", "mode", "status", "predicate",
                                        "subject", "object", "snippet")} for c in self.repo.claims_for(eid)]
-        return {"entity": ent, "relations": edges, "risks": self.repo.risks(self._family(eid)),
-                "timeline": timeline}
+        return {"entity": ent, "contained_in": self._ancestors(eid), "relations": edges,
+                "risks": self._risks_with_lineage(eid), "timeline": timeline}
 
     def change_impact(self, component: str, max_hops: int = 3) -> dict:
         eid = self.resolve(component)
@@ -223,7 +261,7 @@ class ContextService:
             eid = self.resolve(entity)
             if not eid:
                 return [{"error": f"unknown entity '{entity}'"}]
-            return self.repo.risks(self._family(eid), cats)
+            return self._risks_with_lineage(eid, cats)
         return self.repo.risks(None, cats)
 
     def security_guidance(self, target: str) -> dict:

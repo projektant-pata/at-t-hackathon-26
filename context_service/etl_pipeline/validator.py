@@ -149,6 +149,23 @@ def find_candidates(res: ParseResult) -> list[Candidate]:
             cands.append(Candidate(nid(), "undocumented_dependency", c.subject,
                                    f"Code/config shows {c.subject} calls {c.object}, but no document or diagram describes it.",
                                    ids[:4], ids[:4], "UNDOCUMENTED_DEP", "LOW"))
+    # C6 negation drift: a document says a relation does NOT exist, but runtime truth observes it
+    observed = {(c.subject, c.predicate, c.object): c for c in res.claims
+                if c.provenance.tier == 1 and c.mode == "observed"}
+    for c in res.claims:
+        if c.mode != "negated" or c.status in {"SUPERSEDED", "REJECTED"}:
+            continue
+        t1 = observed.get((c.subject, c.predicate, c.object))
+        target = res.entities.get(c.object)
+        exists_now = t1 is not None or (target is not None and target.properties.get("status") == "current"
+                                        and target.grounded_tier == 1)
+        if exists_now:
+            truth = [t1.id] if t1 else [x.id for x in res.claims if x.provenance.tier == 1 and
+                                        (x.object == c.object or x.subject == c.object)][:4]
+            cands.append(Candidate(nid(), "negation_drift", _anchor_of(c.subject, res),
+                                   f"{c.provenance.file_path} states that {c.subject} -{c.predicate.value}-> {c.object} "
+                                   f"does not exist, but code/SQL/config observes it.", [c.id], truth,
+                                   "STALE_DOC", "MEDIUM"))
     return cands
 
 
@@ -255,7 +272,7 @@ async def reconcile(res: ParseResult, use_llm: bool, audit: dict) -> None:
     claims = {c.id: c for c in res.claims}
     if not use_llm:
         for k in cands:
-            if k.kind in {"column_drift", "ownership_drift", "endpoint_drift"}:
+            if k.kind in {"column_drift", "ownership_drift", "endpoint_drift", "negation_drift"}:
                 res.risks.append(candidate_to_risk(k, claims, res, "rule:deterministic-crosscheck"))
         audit["judge"] = "skipped (LLM disabled)"
         return
@@ -322,7 +339,8 @@ async def reconcile(res: ParseResult, use_llm: bool, audit: dict) -> None:
             c.properties["status_reason"] = st.reason
             stats["status_updates"] += 1
         for k in ks:  # high-precision deterministic candidates the judge neither confirmed nor rejected
-            if k.id not in fp and not (set(k.claim_ids) & covered) and k.kind in {"column_drift", "ownership_drift"}:
+            if k.id not in fp and not (set(k.claim_ids) & covered) and \
+                    k.kind in {"column_drift", "ownership_drift", "negation_drift"}:
                 res.risks.append(candidate_to_risk(k, claims, res, "rule:deterministic-crosscheck"))
     stats["false_positive_candidates"] = len(fp)
     audit["judge"] = stats
@@ -344,7 +362,7 @@ def aggregate_edges(res: ParseResult) -> list[Edge]:
                                                                                           "CONTRADICTED", "PROPOSED"}]
         if t1_observed:
             status, conf = "VERIFIED", min(0.99, 0.9 + 0.02 * min(len(files), 4))
-        elif modes <= {"rejected"} or "REJECTED" in statuses and not live:
+        elif modes <= {"rejected", "negated"} or "REJECTED" in statuses and not live:
             status, conf = "REJECTED", 0.05
         elif modes <= {"deprecated"} or ("SUPERSEDED" in statuses and not live):
             status, conf = "SUPERSEDED", 0.15
